@@ -3,8 +3,8 @@ ID=13
 
 alias killgazebo="killall gzserver gzclient"
 
-alias sz="source ~/.zshrc; echo \"Zsh is reloaded!\""
-alias sb="source ~/.bashrc; echo \"Ba
+alias sz="source ~/.zshrc; echo \"Zshrc is reloaded!\""
+alias sb="source ~/.bashrc; echo \"Bashrc is reloaded!\""
 
 
 sh is reloaded!\""

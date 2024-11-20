@@ -21,5 +21,20 @@ ws_setting()
 	tmp2
 }
 
+get_status()
+{
+	if [ -z $ROS_DOMAIN_ID ]; then
+		echo "ROS_DOMAIN_ID : 0"
+	else
+		echo "ROS_DOMAIN_ID : $ROS_DOMAIN_ID"
+	fi
+
+	if [ -z $ROS_LOCALHOST_ONLY ]; then
+		echo "ROS_LOCALHOST_ONLY : 0"
+	else
+		echo "ROS_LOCALHOST_ONLY : $ROS_LOCALHOST_ONLY"
+	fi
+}
+
 alias  ros2_study="ws_setting \"ros2_study\""
 

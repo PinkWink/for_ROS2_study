@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="params_file" 
+                default="$(find-pkg-share my_opencv_tutorials)/config/size.yaml"/>
+    <node pkg="my_opencv_tutorials" exec="img_pub" output="screen">
+        <param from="$(var params_file)"/>
+    </node>
+</launch>
+

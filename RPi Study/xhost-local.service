@@ -1,0 +1,10 @@
+[Unit]
+Description=Set xhost for local access
+After=graphical.target
+
+[Service]
+ExecStart=/usr/bin/xhost +local:
+User=pw
+
+[Install]
+WantedBy=default.target

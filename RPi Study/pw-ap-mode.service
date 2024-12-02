@@ -1,0 +1,15 @@
+[Unit]
+Description=Minibot AP Network Setup
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "/usr/bin/sudo /sbin/iw dev wlan0 interface add ap0 type __ap && \
+    /bin/sleep 3 && \
+    /usr/bin/sudo /sbin/ifconfig ap0 192.168.4.1/24 netmask 255.255.255.0 && \
+    /usr/bin/sudo /sbin/ifconfig ap0 up && \
+    /usr/bin/sudo /sbin/iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE"
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

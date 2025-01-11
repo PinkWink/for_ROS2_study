@@ -21,6 +21,14 @@ sudo apt install -y meson ninja-build
 sudo apt install -y libavcodec-dev
 ```
 
+### rpicam-apps build
+```
+cd rpicam-apps
+meson setup build -Denable_libav=enabled -Denable_drm=enabled -Denable_egl=enabled -Denable_qt=enabled -Denable_opencv=disabled -Denable_tflite=disabled -Denable_hailo=disabled
+meson compile -C build
+sudo meson install -C build
+```
+
 ### 99-pinky_camera.rules
 ```
 SUBSYSTEM=="video4linux" KERNEL=="video*", MODE="0666"

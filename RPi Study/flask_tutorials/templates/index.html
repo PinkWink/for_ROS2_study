@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>PinkLAB - 라즈베리파이 공개 강의 -</title>
+    <style>
+        body {
+            background-color: #f0f0f0;
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .video-container {
+            display: inline-block;
+            border: 5px solid #ff69b4; /* 핑크 테두리 */
+            padding: 10px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        img {
+            display: block;
+            width: 640px;
+            height: 480px;
+        }
+        .footer-link {
+            margin-top: 20px;
+            font-size: 16px;
+        }
+        .footer-link a {
+            color: #ff69b4;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .footer-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>PinkLAB - 라즈베리파이 공개 강의 -</h1>
+    <div class="video-container">
+        <img src="{{ url_for('video_feed') }}" alt="Streaming Video">
+    </div>
+    <div class="footer-link">
+        <a href="https://www.youtube.com/@pinklab_studio" target="_blank">https://www.youtube.com/@pinklab_studio</a>
+    </div>
+</body>
+</html>

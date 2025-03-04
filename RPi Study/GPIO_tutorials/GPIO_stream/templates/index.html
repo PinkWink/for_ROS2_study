@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Raspberry Pi 영상 및 초음파 센서</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .bordered {
+            border: 2px solid pink;
+            margin: 10px auto;
+        }
+        /* 캔버스 컨테이너를 상대 위치로 하여 텍스트 박스를 오버레이 */
+        .chart-container {
+            position: relative;
+            display: inline-block;
+        }
+        /* 텍스트 박스 스타일 */
+        .sensor-display {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 2px 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+    </style>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Raspberry Pi 영상 스트리밍</h1>
+    <img src="{{ url_for('video_feed') }}" alt="Video Stream" class="bordered">
+    
+    <h1>초음파 센서 그래프 (최근 10초)</h1>
+    <div class="chart-container bordered">
+        <canvas id="sensorChart" width="320" height="240"></canvas>
+        <div id="sensorDisplay" class="sensor-display">0.00 cm</div>
+    </div>
+    
+    <script>
+        // 기준 시간 설정 (초 단위 x축 기준)
+        const startTime = Date.now();
+        
+        // Chart.js 초기화 (산점도: 데이터셋은 {x: 경과시간, y: 센서값} 형태)
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const sensorChart = new Chart(ctx, {
+            type: 'scatter', // 선 없이 점만 표시
+            data: {
+                datasets: [{
+                    label: '거리 (cm)',
+                    data: [], // {x: 초, y: 센서값} 형태의 데이터 배열
+                    showLine: false, // 선을 그리지 않음
+                    pointBackgroundColor: 'blue',
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: false,
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        title: {
+                            display: true,
+                            text: '시간 (초)'
+                        },
+                        ticks: {
+                            // 소수점 한자리까지 표시
+                            callback: function(value) {
+                                return value.toFixed(1);
+                            }
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: '거리 (cm)'
+                        },
+                        min: 0
+                        // max는 동적으로 업데이트
+                    }
+                }
+            }
+        });
+        
+        // 데이터 포인트 추가 함수: 새로운 데이터 추가 후, 10초 이전 데이터 제거
+        function addData(chart, newPoint) {
+            chart.data.datasets[0].data.push(newPoint);
+            const currentTime = newPoint.x;
+            // 10초 이전의 데이터 제거 (최근 10초 분량 유지)
+            chart.data.datasets[0].data = chart.data.datasets[0].data.filter(p => p.x >= currentTime - 10);
+            // x축 범위를 최근 10초로 설정
+            chart.options.scales.x.min = currentTime - 10;
+            chart.options.scales.x.max = currentTime;
+            // 보이는 데이터 중 최대 센서값을 계산하여 y축 max를 (최대값 + 10)으로 설정
+            const currentData = chart.data.datasets[0].data;
+            const maxData = currentData.length > 0 ? Math.max(...currentData.map(p => p.y)) : 0;
+            chart.options.scales.y.max = maxData + 10;
+            chart.update();
+        }
+        
+        function updateSensor() {
+            fetch('/sensor')
+            .then(response => response.json())
+            .then(data => {
+                let sensorValue = data.sensor_value;
+                // 경과 시간을 초 단위로 계산 (소수점 한자리)
+                const now = Date.now();
+                const elapsedSeconds = ((now - startTime) / 1000);
+                const newPoint = { x: parseFloat(elapsedSeconds.toFixed(1)), y: sensorValue };
+                addData(sensorChart, newPoint);
+                // 텍스트 박스에 현재 센서값 업데이트
+                document.getElementById('sensorDisplay').innerText = sensorValue.toFixed(2) + ' cm';
+            })
+            .catch(error => console.error('Error:', error));
+        }
+        
+        // 500ms마다 초음파 센서 값을 업데이트하여 차트에 추가
+        setInterval(updateSensor, 500);
+    </script>
+</body>
+</html>

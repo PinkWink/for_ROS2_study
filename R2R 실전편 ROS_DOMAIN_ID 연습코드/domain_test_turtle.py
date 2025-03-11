@@ -16,7 +16,7 @@ class TurtleController(Node):
 
     def timer_callback(self):
         msg = Twist()
-        # 선형 속도는 0, 각속도는 지정된 값(양수: 반시계, 음수: 시계)로 설정
+        # 각속도는 지정된 값(양수: 반시계, 음수: 시계)로 설정
         msg.linear.x = 1.0
         msg.angular.z = self.angular_speed
         self.publisher_.publish(msg)

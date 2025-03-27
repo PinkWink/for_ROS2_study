@@ -1,0 +1,43 @@
+classDiagram
+    class TurtleGoalController {
+        - angle_tolerance: float
+        - distance_tolerance: float
+        - angular_pid: PID
+        - linear_pid: PID
+        - state_instance: ControllerState
+        - goal_pose: Pose
+        + __init__()
+        + parameter_callback(params) : SetParametersResult
+        + goal_pose_callback(msg)
+        + pose_callback(msg)
+    }
+    class ControllerState {
+        <<abstract>>
+        - controller: TurtleGoalController
+        + __init__(controller)
+        + update(current_pose) : (Twist, StateResult)
+    }
+    class RotateToGoalState {
+        + update(current_pose) : (Twist, StateResult)
+    }
+    class MoveToGoalState {
+        + update(current_pose) : (Twist, StateResult)
+    }
+    class RotateToFinalState {
+        + update(current_pose) : (Twist, StateResult)
+    }
+    class GoalReachedState {
+        + update(current_pose) : (Twist, StateResult)
+    }
+    class StateResult {
+        <<enumeration>>
+        + CONTINUE
+        + COMPLETE
+    }
+    
+    TurtleGoalController --> PID : uses
+    TurtleGoalController --> ControllerState : manages
+    ControllerState <|-- RotateToGoalState
+    ControllerState <|-- MoveToGoalState
+    ControllerState <|-- RotateToFinalState
+    ControllerState <|-- GoalReachedState

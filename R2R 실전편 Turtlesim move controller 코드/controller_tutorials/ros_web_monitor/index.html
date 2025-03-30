@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ROS2 State Monitor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    #stateInfo p {
+      font-size: 16px;
+      margin: 5px 0;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin-top: 20px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>ROS2 State Monitor</h1>
+  <div id="stateInfo">
+    <p id="stateDisplay">Current State: N/A</p>
+    <p id="angleError">Angle Error: N/A</p>
+    <p id="distanceError">Distance Error: N/A</p>
+    <p id="poseInfo">Turtle Pose: N/A</p>
+    <p id="goalInfo">Goal Pose: N/A</p>
+  </div>
+  
+  <!-- 캔버스: 상태 원 및 화살표 -->
+  <canvas id="stateCanvas" width="800" height="200"></canvas>
+  
+  <!-- 캔버스: turtlesim 전체 맵 및 turtle 위치/자세 -->
+  <canvas id="mapCanvas" width="400" height="400"></canvas>
+  
+  <!-- roslibjs를 CDN에서 불러옵니다 -->
+  <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+  <script>
+    // ROS 브릿지에 연결 (rosbridge_server가 ws://localhost:9090에서 실행 중)
+    var ros = new ROSLIB.Ros({
+      url : 'ws://localhost:9090'
+    });
+    
+    ros.on('connection', function() {
+      console.log('Connected to websocket server.');
+    });
+    
+    ros.on('error', function(error) {
+      console.error('Error connecting to websocket server: ', error);
+    });
+    
+    ros.on('close', function() {
+      console.log('Connection to websocket server closed.');
+    });
+    
+    // /web/aggregated_state 토픽 구독 (std_msgs/String)
+    var stateListener = new ROSLIB.Topic({
+      ros : ros,
+      name : '/web/aggregated_state',
+      messageType : 'std_msgs/String'
+    });
+    
+    var currentData = {};
+    
+    // 상태 원들을 그릴 캔버스
+    var stateCanvas = document.getElementById("stateCanvas");
+    var stateCtx = stateCanvas.getContext("2d");
+    // 네 가지 상태와 원의 위치를 정의합니다.
+    var states = ["RotateToGoal", "MoveToGoal", "RotateToFinal", "GoalReached"];
+    var circlePositions = [
+      {x: 100, y: 100},
+      {x: 300, y: 100},
+      {x: 500, y: 100},
+      {x: 700, y: 100}
+    ];
+    
+    // turtlesim 맵을 그릴 캔버스 (맵 크기: 0~11)
+    var mapCanvas = document.getElementById("mapCanvas");
+    var mapCtx = mapCanvas.getContext("2d");
+    var mapWidth = 11;  // turtlesim X범위
+    var mapHeight = 11; // turtlesim Y범위
+    var scale = mapCanvas.width / mapWidth;  // 캔버스에 맞게 스케일 적용
+    
+    // 화살표 그리기 함수 (출발점에서 도착점까지 선과 화살촉을 그림)
+    function drawArrow(ctx, fromx, fromy, tox, toy) {
+      var headlen = 10; // 화살촉 길이
+      var dx = tox - fromx;
+      var dy = toy - fromy;
+      var angle = Math.atan2(dy, dx);
+      ctx.beginPath();
+      ctx.moveTo(fromx, fromy);
+      ctx.lineTo(tox, toy);
+      ctx.stroke();
+      // 화살촉 그리기: 두 선분
+      ctx.beginPath();
+      ctx.moveTo(tox, toy);
+      ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI/6), toy - headlen * Math.sin(angle - Math.PI/6));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tox, toy);
+      ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI/6), toy - headlen * Math.sin(angle + Math.PI/6));
+      ctx.stroke();
+    }
+    
+    // 상태 원과 화살표 그리기 함수
+    function drawStates(activeState) {
+      stateCtx.clearRect(0, 0, stateCanvas.width, stateCanvas.height);
+      
+      // 원 사이를 화살표로 연결 (좌측부터 우측)
+      for (let i = 0; i < circlePositions.length - 1; i++) {
+        let start = circlePositions[i];
+        let end = circlePositions[i+1];
+        // 화살표는 원 테두리에서 시작하도록 (반지름 50)
+        let angle = Math.atan2(end.y - start.y, end.x - start.x);
+        let startX = start.x + 50 * Math.cos(angle);
+        let startY = start.y + 50 * Math.sin(angle);
+        let endX = end.x - 50 * Math.cos(angle);
+        let endY = end.y - 50 * Math.sin(angle);
+        drawArrow(stateCtx, startX, startY, endX, endY);
+      }
+      
+      // 각 상태를 원으로 그리기
+      for (let i = 0; i < states.length; i++) {
+        let pos = circlePositions[i];
+        stateCtx.beginPath();
+        stateCtx.arc(pos.x, pos.y, 50, 0, 2 * Math.PI);
+        // 현재 활성 상태는 빨간 테두리, 나머지는 검정
+        if (states[i] === activeState) {
+          stateCtx.lineWidth = 5;
+          stateCtx.strokeStyle = 'red';
+        } else {
+          stateCtx.lineWidth = 2;
+          stateCtx.strokeStyle = 'black';
+        }
+        stateCtx.stroke();
+        // 상태 이름 표시
+        stateCtx.font = "16px Arial";
+        stateCtx.textAlign = "center";
+        stateCtx.fillStyle = "black";
+        stateCtx.fillText(states[i], pos.x, pos.y);
+      }
+    }
+    
+    // turtlesim 맵과 turtle의 위치 및 자세를 그리기
+    function drawTurtleMap() {
+      mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+      // 맵 경계 그리기
+      mapCtx.strokeStyle = 'black';
+      mapCtx.lineWidth = 2;
+      mapCtx.strokeRect(0, 0, mapCanvas.width, mapCanvas.height);
+      
+      // turtle pose가 있을 경우
+      if (currentData.turtle_pose) {
+        // turtlesim의 좌표를 캔버스 좌표로 변환 (y축 반전)
+        let x = currentData.turtle_pose.x * scale;
+        let y = mapCanvas.height - (currentData.turtle_pose.y * scale);
+        // turtle의 방향 (theta)를 고려하여 화살표를 그림
+        let arrowLength = 30;
+        let theta = currentData.turtle_pose.theta;
+        let endX = x + arrowLength * Math.cos(theta);
+        let endY = y - arrowLength * Math.sin(theta); // 캔버스의 y는 반전되므로 빼줌
+        
+        mapCtx.strokeStyle = 'blue';
+        mapCtx.lineWidth = 3;
+        drawArrow(mapCtx, x, y, endX, endY);
+        
+        // turtle의 현재 위치에 원 표시
+        mapCtx.beginPath();
+        mapCtx.arc(x, y, 5, 0, 2*Math.PI);
+        mapCtx.fillStyle = 'blue';
+        mapCtx.fill();
+      }
+      
+      // goal_pose가 있을 경우, 목표 위치 표시 (작은 빨간 원)
+      if (currentData.goal_pose) {
+        let gx = currentData.goal_pose.x * scale;
+        let gy = mapCanvas.height - (currentData.goal_pose.y * scale);
+        mapCtx.beginPath();
+        mapCtx.arc(gx, gy, 5, 0, 2*Math.PI);
+        mapCtx.fillStyle = 'red';
+        mapCtx.fill();
+      }
+    }
+    
+    // /web/aggregated_state 토픽에서 데이터 수신
+    stateListener.subscribe(function(message) {
+      try {
+        currentData = JSON.parse(message.data);
+      } catch(e) {
+        console.error("Error parsing JSON:", e);
+        return;
+      }
+      
+      // 텍스트 정보 업데이트
+      document.getElementById("stateDisplay").innerText = "Current State: " + (currentData.state || "N/A");
+      document.getElementById("angleError").innerText = "Angle Error: " + (currentData.angle_error !== null ? currentData.angle_error : "N/A");
+      document.getElementById("distanceError").innerText = "Distance Error: " + (currentData.distance_error !== null ? currentData.distance_error : "N/A");
+      
+      if (currentData.turtle_pose) {
+        document.getElementById("poseInfo").innerText = "Turtle Pose: x=" + currentData.turtle_pose.x.toFixed(2) +
+                                                        ", y=" + currentData.turtle_pose.y.toFixed(2) +
+                                                        ", theta=" + currentData.turtle_pose.theta.toFixed(2);
+      } else {
+        document.getElementById("poseInfo").innerText = "Turtle Pose: N/A";
+      }
+      
+      if (currentData.goal_pose) {
+        document.getElementById("goalInfo").innerText = "Goal Pose: x=" + currentData.goal_pose.x.toFixed(2) +
+                                                        ", y=" + currentData.goal_pose.y.toFixed(2) +
+                                                        ", theta=" + currentData.goal_pose.theta.toFixed(2);
+      } else {
+        document.getElementById("goalInfo").innerText = "Goal Pose: N/A";
+      }
+      
+      // 상태 원과 화살표 그리기
+      drawStates(currentData.state);
+      // turtlesim 맵 및 turtle 위치 그리기
+      drawTurtleMap();
+    });
+  </script>
+</body>
+</html>

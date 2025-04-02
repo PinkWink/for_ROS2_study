@@ -31,7 +31,7 @@ class TurtleDualPIDController(Node):
         self.distance_tolerance = self.get_parameter('distance_tolerance').value
         
         # --- Angular PID parameters ---
-        self.declare_parameter('P_angular', 1.0)
+        self.declare_parameter('P_angular', 5.0)
         self.declare_parameter('I_angular', 0.0)
         self.declare_parameter('D_angular', 0.0)
         self.declare_parameter('max_angular', 5.0)
@@ -169,7 +169,7 @@ class TurtleDualPIDController(Node):
         
         # 이동 중 목표 방향 보정을 위한 각 PID 제어
         desired_heading = math.atan2(self.goal_pose.y - current_pose.y,
-                                     self.goal_pose.x - current_pose.x)
+                                    self.goal_pose.x - current_pose.x)
         angle_error = normalize_angle(desired_heading - current_pose.theta)
         
         # angular tolerance 적용

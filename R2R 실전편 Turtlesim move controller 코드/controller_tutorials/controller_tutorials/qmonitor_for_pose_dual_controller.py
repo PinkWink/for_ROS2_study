@@ -183,7 +183,8 @@ class MainWindow(QMainWindow):
         # x 좌표 그래프 업데이트 (최근 10초간의 데이터만 표시)
         self.ax_x.clear()
         self.ax_x.plot(self.time_history, self.x_history, label="Current X", color='blue')
-        self.ax_x.plot(self.time_history, self.goal_x_history, label="Goal X", color='red', linestyle='--')
+        self.ax_x.plot(self.time_history, self.goal_x_history, label="Goal X", color='red', 
+                                                                                linestyle='--')
         self.ax_x.set_title("X Coordinate")
         self.ax_x.set_xlabel("Time (s)")
         self.ax_x.set_ylabel("X Value")
@@ -198,7 +199,8 @@ class MainWindow(QMainWindow):
         # y 좌표 그래프 업데이트 (최근 10초간의 데이터만 표시)
         self.ax_y.clear()
         self.ax_y.plot(self.time_history, self.y_history, label="Current Y", color='blue')
-        self.ax_y.plot(self.time_history, self.goal_y_history, label="Goal Y", color='red', linestyle='--')
+        self.ax_y.plot(self.time_history, self.goal_y_history, label="Goal Y", color='red', 
+                                                                                linestyle='--')
         self.ax_y.set_title("Y Coordinate")
         self.ax_y.set_xlabel("Time (s)")
         self.ax_y.set_ylabel("Y Value")

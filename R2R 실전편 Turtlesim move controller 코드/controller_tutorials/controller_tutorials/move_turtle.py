@@ -141,81 +141,118 @@ class TurtleGoalController(Node):
         self.control(msg)
     
     def control(self, current_pose):
+        """
+        현재 상태(state)에 따라 알맞은 상태 핸들러 메서드를 호출하여
+        twist 메시지를 생성하고 이를 발행합니다.
+        """
+        twist_msg = Twist()
+        if self.state == "rotate_to_goal":
+            twist_msg = self.handle_rotate_to_goal(current_pose)
+        elif self.state == "move_to_goal":
+            twist_msg = self.handle_move_to_goal(current_pose)
+        elif self.state == "rotate_to_final":
+            twist_msg = self.handle_rotate_to_final(current_pose)
+        elif self.state == "goal_reached":
+            twist_msg = self.handle_goal_reached()
+            
+        self.cmd_vel_publisher.publish(twist_msg)
+    
+    def handle_rotate_to_goal(self, current_pose):
+        """
+        "rotate_to_goal" 상태:
+        현재 위치에서 목표까지의 heading 에러를 계산하고, angular PID 제어기를 사용하여
+        회전 제어 입력을 생성합니다.
+        """
         twist_msg = Twist()
         error_msg = Float64()
         
-        if self.state == "rotate_to_goal":
-            # 현재 위치에서 목표 위치까지의 방향(heading) 계산
+        desired_heading = math.atan2(self.goal_pose.y - current_pose.y,
+                                     self.goal_pose.x - current_pose.x)
+        error_angle = normalize_angle(desired_heading - current_pose.theta)
+        error_msg.data = error_angle
+        self.error_publisher.publish(error_msg)
+        self.get_logger().info(f"[Rotate to Goal] Heading error: {error_angle:.2f}")
+        
+        if abs(error_angle) > self.angle_tolerance:
+            angular_correction = self.angular_pid.update(error_angle)
+            twist_msg.angular.z = angular_correction
+            twist_msg.linear.x = 0.0
+        else:
+            twist_msg.angular.z = 0.0
+            twist_msg.linear.x = 0.0
+            self.state = "move_to_goal"
+            self.get_logger().info("Heading aligned. Switching to move_to_goal state.")
+        
+        return twist_msg
+
+    def handle_move_to_goal(self, current_pose):
+        """
+        "move_to_goal" 상태:
+        현재 위치와 목표 사이의 선형 오차를 계산하고, 선형 PID 제어기를 통해 전진
+        제어 입력을 생성합니다. 또한 진행 중 heading 오차를 보정합니다.
+        """
+        twist_msg = Twist()
+        error_msg = Float64()
+        
+        dx = self.goal_pose.x - current_pose.x
+        dy = self.goal_pose.y - current_pose.y
+        distance_error = dx * math.cos(current_pose.theta) + dy * math.sin(current_pose.theta)
+        error_msg.data = distance_error
+        self.error_publisher.publish(error_msg)
+        self.get_logger().info(f"[Move to Goal] Distance error: {distance_error:.2f}")
+        
+        if abs(distance_error) > self.distance_tolerance:
+            linear_correction = self.linear_pid.update(distance_error)
+            twist_msg.linear.x = linear_correction
+            
+            # 진행 중 heading 보정
             desired_heading = math.atan2(self.goal_pose.y - current_pose.y,
                                          self.goal_pose.x - current_pose.x)
-            # 헤딩 에러 계산 (정규화)
-            error_angle = normalize_angle(desired_heading - current_pose.theta)
-            error_msg.data = error_angle
-            self.error_publisher.publish(error_msg)
-            self.get_logger().info(f"[Rotate to Goal] Heading error: {error_angle:.2f}")
-            
-            if abs(error_angle) > self.angle_tolerance:
-                # Angular PID를 사용하여 제어 출력 계산
-                angular_correction = self.angular_pid.update(error_angle)
-                twist_msg.angular.z = angular_correction
-                twist_msg.linear.x = 0.0
-            else:
-                twist_msg.angular.z = 0.0
-                twist_msg.linear.x = 0.0
-                self.state = "move_to_goal"
-                self.get_logger().info("Heading aligned. Switching to move_to_goal state.")
-                
-        elif self.state == "move_to_goal":
-            # Calculate vector from current position to goal
-            dx = self.goal_pose.x - current_pose.x
-            dy = self.goal_pose.y - current_pose.y
-            # Compute signed distance error along the robot's current heading
-            distance_error = dx * math.cos(current_pose.theta) + dy * math.sin(current_pose.theta)
-            error_msg.data = distance_error
-            self.error_publisher.publish(error_msg)
-            self.get_logger().info(f"[Move to Goal] Distance error: {distance_error:.2f}")
-            
-            if abs(distance_error) > self.distance_tolerance:
-                # Use linear PID to compute forward control output
-                linear_correction = self.linear_pid.update(distance_error)
-                twist_msg.linear.x = linear_correction
-                
-                # Also, correct heading during movement
-                desired_heading = math.atan2(self.goal_pose.y - current_pose.y,
-                                             self.goal_pose.x - current_pose.x)
-                angle_error = normalize_angle(desired_heading - current_pose.theta)
-                angular_correction = self.angular_pid.update(angle_error)
-                twist_msg.angular.z = angular_correction
-            else:
-                twist_msg.linear.x = 0.0
-                twist_msg.angular.z = 0.0
-                self.state = "rotate_to_final"
-                self.get_logger().info("Position reached. Switching to rotate_to_final state.")
-                
-        elif self.state == "rotate_to_final":
-            # 목표 최종 자세에 맞추기 위해 회전 (최종 theta와의 오차 계산)
-            final_error = normalize_angle(self.goal_pose.theta - current_pose.theta)
-            error_msg.data = final_error
-            self.error_publisher.publish(error_msg)
-            self.get_logger().info(f"[Rotate to Final] Orientation error: {final_error:.2f}")
-            
-            if abs(final_error) > self.angle_tolerance:
-                # Angular PID를 사용하여 최종 회전 제어 출력 계산
-                angular_correction = self.angular_pid.update(final_error)
-                twist_msg.angular.z = angular_correction
-                twist_msg.linear.x = 0.0
-            else:
-                twist_msg.angular.z = 0.0
-                twist_msg.linear.x = 0.0
-                self.state = "goal_reached"
-                self.get_logger().info("Final orientation reached. Goal achieved.")
-                
-        elif self.state == "goal_reached":
+            angle_error = normalize_angle(desired_heading - current_pose.theta)
+            angular_correction = self.angular_pid.update(angle_error)
+            twist_msg.angular.z = angular_correction
+        else:
             twist_msg.linear.x = 0.0
             twist_msg.angular.z = 0.0
-            # 필요 시 상태를 "idle"로 전환하거나 새로운 목표를 기다림
+            self.state = "rotate_to_final"
+            self.get_logger().info("Position reached. Switching to rotate_to_final state.")
         
-        self.cmd_vel_publisher.publish(twist_msg)
+        return twist_msg
+
+    def handle_rotate_to_final(self, current_pose):
+        """
+        "rotate_to_final" 상태:
+        목표의 최종 orientation과의 오차를 계산하여 angular PID를 통해 회전 제어 입력을 생성합니다.
+        """
+        twist_msg = Twist()
+        error_msg = Float64()
+        
+        final_error = normalize_angle(self.goal_pose.theta - current_pose.theta)
+        error_msg.data = final_error
+        self.error_publisher.publish(error_msg)
+        self.get_logger().info(f"[Rotate to Final] Orientation error: {final_error:.2f}")
+        
+        if abs(final_error) > self.angle_tolerance:
+            angular_correction = self.angular_pid.update(final_error)
+            twist_msg.angular.z = angular_correction
+            twist_msg.linear.x = 0.0
+        else:
+            twist_msg.angular.z = 0.0
+            twist_msg.linear.x = 0.0
+            self.state = "goal_reached"
+            self.get_logger().info("Final orientation reached. Goal achieved.")
+        
+        return twist_msg
+
+    def handle_goal_reached(self):
+        """
+        "goal_reached" 상태:
+        목표에 도달한 상태이므로, 모든 제어 입력을 0으로 설정합니다.
+        """
+        twist_msg = Twist()
+        twist_msg.linear.x = 0.0
+        twist_msg.angular.z = 0.0
+        return twist_msg
 
 def main(args=None):
     rclpy.init(args=args)

@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from turtlesim.msg import Pose
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, String
 from rcl_interfaces.msg import SetParametersResult
 import math
 from controller_tutorials.control_apps import PID
@@ -14,25 +14,24 @@ class TurtleGoalController(Node):
     def __init__(self):
         super().__init__('turtle_goal_controller')
         
-        # ROS2 파라미터 선언 (제어 속도, 허용 오차 및 PID 파라미터)
+        # 파라미터 선언 및 PID 초기화 (생략: 기존 코드와 동일)
+        # ... (기존 파라미터 선언 및 PID 초기화 코드)
+        
         self.declare_parameter('angle_tolerance', 0.01)
         self.declare_parameter('distance_tolerance', 0.01)
         
-        # Angular PID 파라미터
         self.declare_parameter('angular_P', 1.0)
         self.declare_parameter('angular_I', 0.0)
         self.declare_parameter('angular_D', 0.0)
         self.declare_parameter('angular_max_state', 2.0)
         self.declare_parameter('angular_min_state', -2.0)
         
-        # Linear PID 파라미터
         self.declare_parameter('linear_P', 1.0)
         self.declare_parameter('linear_I', 0.0)
         self.declare_parameter('linear_D', 0.0)
-        self.declare_parameter('linear_max_state', 2.0)  # 최대 선형 속도는 2
+        self.declare_parameter('linear_max_state', 2.0)
         self.declare_parameter('linear_min_state', -2.0)
         
-        # 초기 파라미터 값 가져오기
         self.angle_tolerance = self.get_parameter('angle_tolerance').value
         self.distance_tolerance = self.get_parameter('distance_tolerance').value
         
@@ -62,11 +61,10 @@ class TurtleGoalController(Node):
         self.linear_pid.max_state = linear_max_state
         self.linear_pid.min_state = linear_min_state
 
-        # 상태 변수 설정
-        # 상태: "idle", "rotate_to_goal", "move_to_goal", "rotate_to_final", "goal_reached"
+        # 상태 변수 설정: 초기 상태는 "idle"
         self.state = "idle"
         
-        # goal_pose 토픽에서 수신할 목표 위치 및 최종 자세 (초기값 None)
+        # goal_pose 토픽에서 수신할 목표 위치 및 최종 자세 (초기에는 None)
         self.goal_pose = None
         
         # Subscriber 및 Publisher 생성
@@ -82,9 +80,16 @@ class TurtleGoalController(Node):
             10)
         self.cmd_vel_publisher = self.create_publisher(Twist, 'turtle1/cmd_vel', 10)
         self.error_publisher = self.create_publisher(Float64, 'error', 10)
+        # 상태 publisher 추가
+        self.state_publisher = self.create_publisher(String, 'turtle_state', 10)
         
         # 파라미터 동적 재구성을 위한 콜백 등록
         self.add_on_set_parameters_callback(self.parameter_callback)
+    
+    def publish_state(self):
+        msg = String()
+        msg.data = self.state
+        self.state_publisher.publish(msg)
     
     def parameter_callback(self, params):
         for param in params:
@@ -127,25 +132,23 @@ class TurtleGoalController(Node):
         return SetParametersResult(successful=True)
     
     def goal_pose_callback(self, msg):
-        # goal_pose 토픽에서 수신한 목표 위치 및 최종 자세 업데이트 후 상태 전환
         self.goal_pose = msg
-        self.state = "rotate_to_goal"
+        # 목표 수신 시 현재 위치를 가이드 선 시작점으로 기록
+        if self.goal_pose is not None:
+            self.state = "rotate_to_goal"  # 목표 설정 시 상태 변경
+            self.publish_state()
         self.get_logger().info(
             f"Received new goal pose: x={msg.x:.2f}, y={msg.y:.2f}, theta={msg.theta:.2f}"
         )
     
     def pose_callback(self, msg):
-        # 목표가 없으면 제어 동작을 수행하지 않음
         if self.goal_pose is None:
             return
         self.control(msg)
     
     def control(self, current_pose):
-        """
-        현재 상태(state)에 따라 알맞은 상태 핸들러 메서드를 호출하여
-        twist 메시지를 생성하고 이를 발행합니다.
-        """
         twist_msg = Twist()
+        
         if self.state == "rotate_to_goal":
             twist_msg = self.handle_rotate_to_goal(current_pose)
         elif self.state == "move_to_goal":
@@ -154,15 +157,10 @@ class TurtleGoalController(Node):
             twist_msg = self.handle_rotate_to_final(current_pose)
         elif self.state == "goal_reached":
             twist_msg = self.handle_goal_reached()
-            
+        
         self.cmd_vel_publisher.publish(twist_msg)
     
     def handle_rotate_to_goal(self, current_pose):
-        """
-        "rotate_to_goal" 상태:
-        현재 위치에서 목표까지의 heading 에러를 계산하고, angular PID 제어기를 사용하여
-        회전 제어 입력을 생성합니다.
-        """
         twist_msg = Twist()
         error_msg = Float64()
         
@@ -182,15 +180,11 @@ class TurtleGoalController(Node):
             twist_msg.linear.x = 0.0
             self.state = "move_to_goal"
             self.get_logger().info("Heading aligned. Switching to move_to_goal state.")
+            self.publish_state()
         
         return twist_msg
 
     def handle_move_to_goal(self, current_pose):
-        """
-        "move_to_goal" 상태:
-        현재 위치와 목표 사이의 선형 오차를 계산하고, 선형 PID 제어기를 통해 전진
-        제어 입력을 생성합니다. 또한 진행 중 heading 오차를 보정합니다.
-        """
         twist_msg = Twist()
         error_msg = Float64()
         
@@ -205,7 +199,6 @@ class TurtleGoalController(Node):
             linear_correction = self.linear_pid.update(distance_error)
             twist_msg.linear.x = linear_correction
             
-            # 진행 중 heading 보정
             desired_heading = math.atan2(self.goal_pose.y - current_pose.y,
                                          self.goal_pose.x - current_pose.x)
             angle_error = normalize_angle(desired_heading - current_pose.theta)
@@ -216,14 +209,11 @@ class TurtleGoalController(Node):
             twist_msg.angular.z = 0.0
             self.state = "rotate_to_final"
             self.get_logger().info("Position reached. Switching to rotate_to_final state.")
+            self.publish_state()
         
         return twist_msg
 
     def handle_rotate_to_final(self, current_pose):
-        """
-        "rotate_to_final" 상태:
-        목표의 최종 orientation과의 오차를 계산하여 angular PID를 통해 회전 제어 입력을 생성합니다.
-        """
         twist_msg = Twist()
         error_msg = Float64()
         
@@ -241,14 +231,11 @@ class TurtleGoalController(Node):
             twist_msg.linear.x = 0.0
             self.state = "goal_reached"
             self.get_logger().info("Final orientation reached. Goal achieved.")
+            self.publish_state()
         
         return twist_msg
 
     def handle_goal_reached(self):
-        """
-        "goal_reached" 상태:
-        목표에 도달한 상태이므로, 모든 제어 입력을 0으로 설정합니다.
-        """
         twist_msg = Twist()
         twist_msg.linear.x = 0.0
         twist_msg.angular.z = 0.0

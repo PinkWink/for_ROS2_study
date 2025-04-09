@@ -14,9 +14,6 @@ class TurtleGoalController(Node):
     def __init__(self):
         super().__init__('turtle_goal_controller')
         
-        # 파라미터 선언 및 PID 초기화 (생략: 기존 코드와 동일)
-        # ... (기존 파라미터 선언 및 PID 초기화 코드)
-        
         self.declare_parameter('angle_tolerance', 0.01)
         self.declare_parameter('distance_tolerance', 0.01)
         
@@ -78,6 +75,7 @@ class TurtleGoalController(Node):
             'goal_pose',
             self.goal_pose_callback,
             10)
+        
         self.cmd_vel_publisher = self.create_publisher(Twist, 'turtle1/cmd_vel', 10)
         self.error_publisher = self.create_publisher(Float64, 'error', 10)
         # 상태 publisher 추가
@@ -164,8 +162,8 @@ class TurtleGoalController(Node):
         twist_msg = Twist()
         error_msg = Float64()
         
-        desired_heading = math.atan2(self.goal_pose.y - current_pose.y,
-                                     self.goal_pose.x - current_pose.x)
+        desired_heading = math.atan2(   self.goal_pose.y - current_pose.y,
+                                        self.goal_pose.x - current_pose.x)
         error_angle = normalize_angle(desired_heading - current_pose.theta)
         error_msg.data = error_angle
         self.error_publisher.publish(error_msg)
@@ -199,8 +197,8 @@ class TurtleGoalController(Node):
             linear_correction = self.linear_pid.update(distance_error)
             twist_msg.linear.x = linear_correction
             
-            desired_heading = math.atan2(self.goal_pose.y - current_pose.y,
-                                         self.goal_pose.x - current_pose.x)
+            desired_heading = math.atan2(   self.goal_pose.y - current_pose.y,
+                                            self.goal_pose.x - current_pose.x)
             angle_error = normalize_angle(desired_heading - current_pose.theta)
             angular_correction = self.angular_pid.update(angle_error)
             twist_msg.angular.z = angular_correction

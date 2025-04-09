@@ -1,0 +1,45 @@
+flowchart TD
+  %% 구독하는 토픽들 (Subscriptions)
+  subgraph Subscriptions
+    A[goal_pose - Pose]
+    B[turtle1/pose - Pose]
+  end
+
+  %% 컨트롤러 노드 (Controller Node)
+  subgraph Controller_Node
+    C[TurtleGoalController]
+  end
+
+  %% 상태 (States)
+  subgraph States
+    D[idle]
+    E[rotate_to_goal]
+    F[move_to_goal]
+    G[rotate_to_final]
+    H[goal_reached]
+  end
+
+  %% 발행하는 토픽들 (Publications)
+  subgraph Publications
+    I[turtle1/cmd_vel - Twist]
+    J[error - Float64]
+  end
+
+  %% 데이터 흐름 (Data Flow)
+  A --> C
+  B --> C
+  
+  C -->|goal_pose callback sets state| E
+  
+  E -->|Compute heading error| I
+  E --if error <= tol--> F
+  
+  F -->|Compute distance error and adjust heading| I
+  F --if error <= tol--> G
+  
+  G -->|Compute final orientation error| I
+  G --if error <= tol--> H
+  
+  H -->|Publish zero Twist| I
+  
+  C -->|Publishes error messages| J

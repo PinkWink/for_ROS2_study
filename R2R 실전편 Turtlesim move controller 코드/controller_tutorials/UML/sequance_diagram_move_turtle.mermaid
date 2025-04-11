@@ -1,0 +1,35 @@
+sequenceDiagram
+    %% Diagram 제목 (Mermaid에서는 title 기능이 제한적이므로 주석으로 표시)
+    %% GoalPoseOrchestrator Sequence Diagram
+
+    participant ExternalGoal as ExternalGoal
+    participant Orchestrator as Orchestrator
+    participant RotateToGoalNode as RotateToGoalNode
+    participant MoveToGoalNode as MoveToGoalNode
+    participant RotateToFinalNode as RotateToFinalNode
+
+    ExternalGoal->>Orchestrator: Send goal_pose message
+    Orchestrator->>RotateToGoalNode: ChangeState(TRANSITION_ACTIVATE)
+    RotateToGoalNode-->>Orchestrator: Activation response
+    Note right of RotateToGoalNode: Process goal_pose\nfor rotation
+    RotateToGoalNode->>Orchestrator: Publish "RotateToGoal_Complete"
+    Orchestrator->>RotateToGoalNode: ChangeState(TRANSITION_DEACTIVATE)
+
+    Orchestrator->>MoveToGoalNode: ChangeState(TRANSITION_ACTIVATE)
+    MoveToGoalNode-->>Orchestrator: Activation response
+    Note right of MoveToGoalNode: Process goal_pose\nfor movement
+    MoveToGoalNode->>Orchestrator: Publish "MoveToGoal_Complete"
+    Orchestrator->>MoveToGoalNode: ChangeState(TRANSITION_DEACTIVATE)
+
+    Orchestrator->>RotateToFinalNode: ChangeState(TRANSITION_ACTIVATE)
+    RotateToFinalNode-->>Orchestrator: Activation response
+    Note right of RotateToFinalNode: Process goal_pose\nfor final rotation
+    RotateToFinalNode->>Orchestrator: Publish "RotateToFinal_Complete"
+    Orchestrator->>RotateToFinalNode: ChangeState(TRANSITION_DEACTIVATE)
+
+    %% Preemption Sequence
+    ExternalGoal->>Orchestrator: New goal_pose message received
+    Note left of Orchestrator: Preempt current active node if any
+    Orchestrator->>Orchestrator: Preempt current sequence
+    Orchestrator->>RotateToGoalNode: ChangeState(TRANSITION_ACTIVATE)
+    Note right of RotateToGoalNode: Restart sequence\nfor new goal_pose

@@ -9,13 +9,16 @@ import math
 
 from controller_tutorials.control_apps import PID
 
+
 def normalize_angle(angle):
     return math.atan2(math.sin(angle), math.cos(angle))
 
-# Define possible state results
+
+# Define possible state results (IDLE removed)
 class StateResult:
     CONTINUE = 0
     COMPLETE = 1
+
 
 # Abstract state class that returns a (Twist, status) tuple
 class ControllerState:
@@ -25,22 +28,22 @@ class ControllerState:
     def update(self, current_pose):
         raise NotImplementedError("update() must be implemented by subclasses")
 
+
 # RotateToGoalState: turn to face the goal
 class RotateToGoalState(ControllerState):
     def update(self, current_pose):
         twist_msg = Twist()
-        # Calculate desired heading from current position to goal
-        desired_heading = math.atan2(self.controller.goal_pose.y - current_pose.y,
-                                        self.controller.goal_pose.x - current_pose.x)
+        desired_heading = math.atan2(
+            self.controller.goal_pose.y - current_pose.y,
+            self.controller.goal_pose.x - current_pose.x)
         error_angle = normalize_angle(desired_heading - current_pose.theta)
         error_msg = Float64()
         error_msg.data = error_angle
-        # Publish angle error
+        # Publish angle error and state
         self.controller.angle_error_publisher.publish(error_msg)
-        # Publish current state string
         self.controller.state_publisher.publish(String(data="RotateToGoal"))
         self.controller.get_logger().info(f"[RotateToGoal] Heading error: {error_angle:.2f}")
-        
+
         if abs(error_angle) > self.controller.angle_tolerance:
             angular_correction = self.controller.angular_pid.update(error_angle)
             twist_msg.angular.z = angular_correction
@@ -52,28 +55,27 @@ class RotateToGoalState(ControllerState):
             self.controller.get_logger().info("Heading aligned. RotateToGoal complete.")
             return twist_msg, StateResult.COMPLETE
 
+
 # MoveToGoalState: move forward toward the goal while correcting heading
 class MoveToGoalState(ControllerState):
     def update(self, current_pose):
         twist_msg = Twist()
         dx = self.controller.goal_pose.x - current_pose.x
         dy = self.controller.goal_pose.y - current_pose.y
-        # Signed distance error along robot's current heading
         distance_error = dx * math.cos(current_pose.theta) + dy * math.sin(current_pose.theta)
         error_msg = Float64()
         error_msg.data = distance_error
-        # Publish distance error
+        # Publish distance error and state
         self.controller.distance_error_publisher.publish(error_msg)
-        # Publish current state string
         self.controller.state_publisher.publish(String(data="MoveToGoal"))
         self.controller.get_logger().info(f"[MoveToGoal] Distance error: {distance_error:.2f}")
-        
+
         if abs(distance_error) > self.controller.distance_tolerance:
             linear_correction = self.controller.linear_pid.update(distance_error)
             twist_msg.linear.x = linear_correction
-            # Also correct heading
-            desired_heading = math.atan2(self.controller.goal_pose.y - current_pose.y,
-                                            self.controller.goal_pose.x - current_pose.x)
+            desired_heading = math.atan2(
+                self.controller.goal_pose.y - current_pose.y,
+                self.controller.goal_pose.x - current_pose.x)
             angle_error = normalize_angle(desired_heading - current_pose.theta)
             angular_correction = self.controller.angular_pid.update(angle_error)
             twist_msg.angular.z = angular_correction
@@ -84,6 +86,7 @@ class MoveToGoalState(ControllerState):
             self.controller.get_logger().info("Position reached. MoveToGoal complete.")
             return twist_msg, StateResult.COMPLETE
 
+
 # RotateToFinalState: rotate in place to match final orientation
 class RotateToFinalState(ControllerState):
     def update(self, current_pose):
@@ -91,12 +94,11 @@ class RotateToFinalState(ControllerState):
         final_error = normalize_angle(self.controller.goal_pose.theta - current_pose.theta)
         error_msg = Float64()
         error_msg.data = final_error
-        # Publish angle error for final orientation
+        # Publish final orientation error and state
         self.controller.angle_error_publisher.publish(error_msg)
-        # Publish current state string
         self.controller.state_publisher.publish(String(data="RotateToFinal"))
         self.controller.get_logger().info(f"[RotateToFinal] Orientation error: {final_error:.2f}")
-        
+
         if abs(final_error) > self.controller.angle_tolerance:
             angular_correction = self.controller.angular_pid.update(final_error)
             twist_msg.angular.z = angular_correction
@@ -108,43 +110,63 @@ class RotateToFinalState(ControllerState):
             self.controller.get_logger().info("Final orientation reached. RotateToFinal complete.")
             return twist_msg, StateResult.COMPLETE
 
-# The state for goal reached simply returns zero control
+
+# GoalReachedState: the terminal state when the goal has been achieved
 class GoalReachedState(ControllerState):
     def update(self, current_pose):
         twist_msg = Twist()
         twist_msg.linear.x = 0.0
         twist_msg.angular.z = 0.0
-        # Publish current state string
         self.controller.state_publisher.publish(String(data="GoalReached"))
+        self.controller.get_logger().info("Goal reached!")
         return twist_msg, StateResult.COMPLETE
+
+
+# StateTransitionManager encapsulates state transition rules
+class StateTransitionManager:
+    def __init__(self, controller):
+        self.controller = controller
+
+    def get_next_state(self, current_state, state_result):
+        if state_result == StateResult.COMPLETE:
+            if isinstance(current_state, RotateToGoalState):
+                return MoveToGoalState(self.controller)
+            elif isinstance(current_state, MoveToGoalState):
+                return RotateToFinalState(self.controller)
+            elif isinstance(current_state, RotateToFinalState):
+                return GoalReachedState(self.controller)
+            elif isinstance(current_state, GoalReachedState):
+                # Terminal state, remain here
+                return GoalReachedState(self.controller)
+        elif state_result == StateResult.CONTINUE:
+            return current_state
+        return current_state
+
 
 # Main controller node that manages state transitions
 class TurtleGoalController(Node):
     def __init__(self):
         super().__init__('turtle_goal_controller')
         
-        # Declare ROS2 parameters for tolerances and PID parameters
+        # Declare parameters for tolerances and PID
         self.declare_parameter('angle_tolerance', 0.1)
         self.declare_parameter('distance_tolerance', 0.1)
-        
-        # Angular PID parameters
-        self.declare_parameter('angular_P', 1.0)
+
+        self.declare_parameter('angular_P', 2.0)
         self.declare_parameter('angular_I', 0.0)
         self.declare_parameter('angular_D', 0.0)
         self.declare_parameter('angular_max_state', 2.0)
         self.declare_parameter('angular_min_state', -2.0)
-        
-        # Linear PID parameters
+
         self.declare_parameter('linear_P', 1.0)
         self.declare_parameter('linear_I', 0.0)
         self.declare_parameter('linear_D', 0.0)
-        self.declare_parameter('linear_max_state', 2.0)  # Maximum linear speed is 2
+        self.declare_parameter('linear_max_state', 2.0)
         self.declare_parameter('linear_min_state', -2.0)
-        
-        # Get initial parameter values
+
         self.angle_tolerance = self.get_parameter('angle_tolerance').value
         self.distance_tolerance = self.get_parameter('distance_tolerance').value
-        
+
         # Initialize Angular PID
         angular_P = self.get_parameter('angular_P').value
         angular_I = self.get_parameter('angular_I').value
@@ -157,7 +179,7 @@ class TurtleGoalController(Node):
         self.angular_pid.D = angular_D
         self.angular_pid.max_state = angular_max_state
         self.angular_pid.min_state = angular_min_state
-        
+
         # Initialize Linear PID
         linear_P = self.get_parameter('linear_P').value
         linear_I = self.get_parameter('linear_I').value
@@ -171,11 +193,11 @@ class TurtleGoalController(Node):
         self.linear_pid.max_state = linear_max_state
         self.linear_pid.min_state = linear_min_state
 
-        # Initialize current state and goal pose
         self.state_instance = None
         self.goal_pose = None
         
-        # Subscribers and publishers
+        self.state_transition_manager = StateTransitionManager(self)
+        
         self.pose_subscriber = self.create_subscription(
             Pose,
             'turtle1/pose',
@@ -187,13 +209,10 @@ class TurtleGoalController(Node):
             self.goal_pose_callback,
             10)
         self.cmd_vel_publisher = self.create_publisher(Twist, 'turtle1/cmd_vel', 10)
-        # Existing error publisher used for some errors; now add separate publishers
         self.angle_error_publisher = self.create_publisher(Float64, 'angle_error', 10)
         self.distance_error_publisher = self.create_publisher(Float64, 'distance_error', 10)
-        # Publisher for current state information
         self.state_publisher = self.create_publisher(String, 'state', 10)
         
-        # Register parameter callback for dynamic reconfiguration
         self.add_on_set_parameters_callback(self.parameter_callback)
     
     def parameter_callback(self, params):
@@ -237,7 +256,6 @@ class TurtleGoalController(Node):
         return SetParametersResult(successful=True)
     
     def goal_pose_callback(self, msg):
-        # Update goal pose and initialize state as RotateToGoalState
         self.goal_pose = msg
         self.state_instance = RotateToGoalState(self)
         self.get_logger().info(
@@ -248,14 +266,7 @@ class TurtleGoalController(Node):
         if self.goal_pose is None or self.state_instance is None:
             return
         twist_msg, status = self.state_instance.update(msg)
-        if status == StateResult.COMPLETE:
-            # Transition to the next state based on the current state's type
-            if isinstance(self.state_instance, RotateToGoalState):
-                self.state_instance = MoveToGoalState(self)
-            elif isinstance(self.state_instance, MoveToGoalState):
-                self.state_instance = RotateToFinalState(self)
-            elif isinstance(self.state_instance, RotateToFinalState):
-                self.state_instance = GoalReachedState(self)
+        self.state_instance = self.state_transition_manager.get_next_state(self.state_instance, status)
         self.cmd_vel_publisher.publish(twist_msg)
 
 def main(args=None):

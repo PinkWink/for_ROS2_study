@@ -104,6 +104,7 @@ class MainWindow(QMainWindow):
                 theta = math.atan2(dy, dx)
             else:
                 theta = 0.0
+
             goal_msg = Pose()
             goal_msg.x = self.drag_start[0]
             goal_msg.y = self.drag_start[1]
@@ -136,6 +137,7 @@ class MainWindow(QMainWindow):
             dy = arrow_len * math.sin(theta)
             self.ax_map.arrow(x, y, dx, dy, head_width=0.3, head_length=0.3, fc='blue', ec='blue')
             self.ax_map.plot(x, y, 'bo')
+
         if self.node.goal_pose is not None:
             gx = self.node.goal_pose.x
             gy = self.node.goal_pose.y
@@ -145,19 +147,21 @@ class MainWindow(QMainWindow):
             dx = arrow_len * math.cos(gtheta)
             dy = arrow_len * math.sin(gtheta)
             self.ax_map.arrow(gx, gy, dx, dy, head_width=0.3, head_length=0.3, fc='red', ec='red')
+
         if self.drag_start is not None and self.drag_current is not None:
             sx, sy = self.drag_start
             cx, cy = self.drag_current
-            self.ax_map.arrow(sx, sy, cx - sx, cy - sy, head_width=0.3, head_length=0.3,
-                              fc='green', ec='green', linestyle='--')
+            self.ax_map.arrow(  sx, sy, cx - sx, cy - sy, head_width=0.3, head_length=0.3,
+                                fc='green', ec='green', linestyle='--')
+            
         if self.node.guide_line_start is not None and self.node.goal_pose is not None:
             start_x, start_y = self.node.guide_line_start
             goal_x = self.node.goal_pose.x
             goal_y = self.node.goal_pose.y
             self.ax_map.plot([start_x, goal_x], [start_y, goal_y], 'r--')
             if self.node.turtle_pose is not None:
-                dist = math.sqrt((self.node.turtle_pose.x - goal_x)**2 +
-                                 (self.node.turtle_pose.y - goal_y)**2)
+                dist = math.sqrt(   (self.node.turtle_pose.x - goal_x)**2 +
+                                    (self.node.turtle_pose.y - goal_y)**2)
                 if dist < 0.1:
                     self.node.guide_line_start = None
 
@@ -170,9 +174,6 @@ class MainWindow(QMainWindow):
         self.ax_state.set_ylim(0, 1)
         self.ax_state.axis('off')
 
-        # 수정된 블록 크기:
-        # 가로폭: 기존 0.8의 1.2배 → 0.96
-        # 세로 높이: 기존 0.06의 1.1배 → 약 0.066
         block_width = 0.8 * 1.2      # 0.96
         block_height = 0.06 * 1.1    # 약 0.066
         spacing = 0.12             # 블록 간 간격 (화살표 길이)
@@ -195,14 +196,14 @@ class MainWindow(QMainWindow):
             # i=0: 최상단 블록, 각 블록의 바닥 y 좌표
             y = group_top - (i + 1) * block_height - i * spacing
             face_color = active_color if self.node.current_state == state else inactive_color
-            rect = FancyBboxPatch((start_x, y), block_width, block_height,
-                                  boxstyle="round,pad=0.02",
-                                  fc=face_color, ec="black", lw=1.5)
+            rect = FancyBboxPatch(( start_x, y), block_width, block_height,
+                                    boxstyle="round,pad=0.02",
+                                    fc=face_color, ec="black", lw=1.5)
             self.ax_state.add_patch(rect)
-            self.ax_state.text(start_x + block_width/2, y + block_height/2,
-                               state, horizontalalignment='center',
-                               verticalalignment='center',
-                               color='black', fontsize=10)
+            self.ax_state.text(  start_x + block_width/2, y + block_height/2,
+                                state, horizontalalignment='center',
+                                verticalalignment='center',
+                                color='black', fontsize=10)
             top_center = (start_x + block_width/2, y + block_height)
             bottom_center = (start_x + block_width/2, y)
             boundaries.append((top_center, bottom_center))
@@ -210,10 +211,10 @@ class MainWindow(QMainWindow):
         for i in range(len(boundaries) - 1):
             start_point = boundaries[i][1]
             end_point = boundaries[i+1][0]
-            self.ax_state.annotate("",
-                                   xy=end_point, xycoords='data',
-                                   xytext=start_point, textcoords='data',
-                                   arrowprops=dict(arrowstyle="->", color='black'))
+            self.ax_state.annotate( "",
+                                    xy=end_point, xycoords='data',
+                                    xytext=start_point, textcoords='data',
+                                    arrowprops=dict(arrowstyle="->", color='black'))
         self.canvas_state.draw()
 
 

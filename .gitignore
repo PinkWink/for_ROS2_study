@@ -1,4 +1,5 @@
 *.DS_Store
+*.pt
 .DS_Store
 .env
 .ipynb_checkpoints

@@ -1,0 +1,7 @@
+<launch>
+    <arg name="param_file" default="$(find-pkg-share ultrasonic_sensor)/config/ultra_params.yaml" />
+
+    <node pkg="ultrasonic_sensor" exec="ultrasonic_publisher" name="ultrasonic_publisher_node" output="screen">
+        <param from="$(var param_file)" />
+    </node>
+</launch>

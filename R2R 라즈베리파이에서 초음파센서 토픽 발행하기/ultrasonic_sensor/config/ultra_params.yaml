@@ -1,0 +1,8 @@
+# Ultrasonic sensor parameters
+ultrasonic_publisher_node:
+    ros__parameters:
+        trig_pin: 23
+        echo_pin: 24
+        ultra_sonic_sample_rate: 0.1
+        min_range_mm: 100.0
+        max_range_mm: 800.0

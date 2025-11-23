@@ -25,6 +25,10 @@ from rclpy.qos import (
 # TF2
 from tf2_ros import Buffer, TransformListener
 
+# SLAM Toolbox services
+from slam_toolbox.srv import SaveMap, Reset
+from std_msgs.msg import String
+
 
 ############################################################
 # Flask 설정
@@ -130,7 +134,13 @@ class Nav2WebBridge(Node):
         # Nav2 액션 클라이언트
         self.nav_client = ActionClient(self, NavigateToPose, "navigate_to_pose")
 
-        self.get_logger().info("Nav2WebBridge (TF-based) started.")
+        # ---- SLAM Toolbox 서비스 클라이언트 ----
+        # /slam_toolbox/save_map : slam_toolbox/srv/SaveMap
+        # /slam_toolbox/reset    : slam_toolbox/srv/Reset
+        self.save_map_client = self.create_client(SaveMap, "/slam_toolbox/save_map")
+        self.reset_client = self.create_client(Reset, "/slam_toolbox/reset")
+
+        self.get_logger().info("Nav2WebBridge (TF-based + SLAM) started.")
 
     # ---------------- 콜백 ----------------
     def map_callback(self, msg):
@@ -289,6 +299,38 @@ class Nav2WebBridge(Node):
         self.nav_client.send_goal_async(goal)
         return True
 
+    # ---------------- SLAM Toolbox 제어 ----------------
+    def slam_reset(self) -> bool:
+        """
+        /slam_toolbox/reset 호출: 새 맵 시작(현재 pose-graph 리셋).
+        """
+        if not self.reset_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().error("/slam_toolbox/reset service not available.")
+            return False
+
+        req = Reset.Request()
+        future = self.reset_client.call_async(req)
+        # 결과는 굳이 기다리지 않고 True 반환 (비동기)
+        self.get_logger().info("[WEB] Requested SLAM reset.")
+        return True
+
+    def slam_save_map(self, name: str) -> bool:
+        """
+        /slam_toolbox/save_map 호출: 현재 SLAM 맵을 pgm+yaml로 저장.
+        name: 파일 이름 (확장자 없이). slam_toolbox가 실행중인 디렉토리에 저장됨.
+        """
+        if not self.save_map_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().error("/slam_toolbox/save_map service not available.")
+            return False
+
+        req = SaveMap.Request()
+        req.name = String(data=name)
+
+        future = self.save_map_client.call_async(req)
+        self.get_logger().info(f"[WEB] Requested SLAM save_map: name='{name}'")
+        # 마찬가지로 결과는 비동기로 처리하고 여기선 성공 요청만 리턴
+        return True
+
 
 ############################################################
 # Flask 라우트
@@ -326,6 +368,39 @@ def api_goal():
     return jsonify({"success": ok})
 
 
+@app.route("/api/slam/reset", methods=["POST"])
+def api_slam_reset():
+    """
+    SLAM Toolbox /reset 호출: 웹에서 '새 맵 시작' 버튼 눌렀을 때.
+    """
+    global ros_node
+    if ros_node is None:
+        return jsonify({"success": False, "msg": "ROS not ready"}), 500
+
+    ok = ros_node.slam_reset()
+    return jsonify({"success": ok})
+
+
+@app.route("/api/slam/save_map", methods=["POST"])
+def api_slam_save_map():
+    """
+    SLAM Toolbox /save_map 호출: 웹에서 '맵 저장' 버튼 눌렀을 때.
+    body: { "name": "pinky_lab_office" }
+    """
+    global ros_node
+    if ros_node is None:
+        return jsonify({"success": False, "msg": "ROS not ready"}), 500
+
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    if not name:
+        # 비어있으면 날짜 기반 기본 이름
+        name = time.strftime("pinky_map_%Y%m%d_%H%M%S")
+
+    ok = ros_node.slam_save_map(name)
+    return jsonify({"success": ok, "name": name})
+
+
 ############################################################
 # ROS 스레드
 ############################################################
@@ -352,5 +427,5 @@ if __name__ == "__main__":
 
     time.sleep(1.0)
 
-    print("Flask Web Server (TF-based) Running on http://0.0.0.0:8080")
+    print("Flask Web Server (TF-based + SLAM) Running on http://0.0.0.0:8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

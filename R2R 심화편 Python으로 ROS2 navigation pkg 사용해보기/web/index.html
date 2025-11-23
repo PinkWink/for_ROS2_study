@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Pinky Pro Web Nav Monitor</title>
+  <title>Pinky Pro Web Nav + SLAM Console</title>
   <style>
     :root {
       --pink-start: #ff6bb8;
@@ -117,7 +117,7 @@
 
     /* 오른쪽: 컨트롤 패널 */
     #right {
-      width: 320px;
+      width: 340px;
       padding: 20px 18px;
       display: flex;
       flex-direction: column;
@@ -302,6 +302,90 @@
       font-size: 11px;
       color: var(--text-muted);
     }
+
+    /* SLAM 카드 전용 */
+    .slam-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .text-input {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--text-main);
+      font-size: 12px;
+      outline: none;
+    }
+
+    .text-input::placeholder {
+      color: rgba(148, 163, 184, 0.7);
+    }
+
+    .slam-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: transparent;
+      color: var(--text-main);
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.07s ease;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--pink-start), var(--blue-end));
+      border-color: transparent;
+      color: #020617;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.05);
+    }
+
+    .btn-outline {
+      border-color: rgba(148, 163, 184, 0.8);
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--text-main);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--accent);
+    }
+
+    .slam-status {
+      font-size: 11px;
+      color: var(--text-muted);
+      min-height: 14px;
+    }
+
+    .slam-status.ok {
+      color: #4ade80;
+    }
+
+    .slam-status.err {
+      color: #fb7185;
+    }
   </style>
 </head>
 <body>
@@ -333,7 +417,7 @@
       </div>
       <div>
         <div class="header-text-main">PinkLab · Pinky Pro</div>
-        <div class="header-text-sub">Web Navigation Console</div>
+        <div class="header-text-sub">Web Navigation & SLAM Console</div>
       </div>
     </div>
     <div class="info-line">
@@ -375,6 +459,30 @@
           </div>
         </div>
       </label>
+    </div>
+  </div>
+
+  <!-- SLAM Mapping 카드 -->
+  <div class="panel-card">
+    <div class="section-title">SLAM Mapping (slam_toolbox)</div>
+    <div class="slam-input-row">
+      <input
+        type="text"
+        id="mapNameInput"
+        class="text-input"
+        placeholder="map name (e.g. pinky_lab)"
+        value="pinky_map">
+    </div>
+    <div class="slam-actions">
+      <button id="btnSlamReset" class="btn btn-outline">
+        Reset Map
+      </button>
+      <button id="btnSlamSave" class="btn btn-primary">
+        Save Map
+      </button>
+    </div>
+    <div id="slamStatus" class="slam-status">
+      <!-- 상태 메시지 -->
     </div>
   </div>
 
@@ -420,6 +528,12 @@ let isDraggingGoal = false;
 let goalStartWorld = null;     // {x,y} world 좌표
 let goalCurrentCanvas = null;  // {x,y} canvas 좌표 (미리보기용)
 
+// SLAM UI 요소
+const slamStatusEl = document.getElementById("slamStatus");
+const mapNameInput = document.getElementById("mapNameInput");
+const btnSlamReset = document.getElementById("btnSlamReset");
+const btnSlamSave = document.getElementById("btnSlamSave");
+
 // 토글 이벤트 연결
 document.getElementById("toggleGlobal").addEventListener("change", (e) => {
   showGlobalCostmap = e.target.checked;
@@ -429,6 +543,59 @@ document.getElementById("toggleGlobal").addEventListener("change", (e) => {
 document.getElementById("toggleLocal").addEventListener("change", (e) => {
   showLocalCostmap = e.target.checked;
   drawState();
+});
+
+// SLAM 버튼 이벤트
+btnSlamReset.addEventListener("click", async () => {
+  slamStatusEl.classList.remove("ok", "err");
+  slamStatusEl.textContent = "Resetting SLAM map...";
+
+  try {
+    const res = await fetch("/api/slam/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (data.success) {
+      slamStatusEl.classList.add("ok");
+      slamStatusEl.textContent = "SLAM reset requested. Start driving to build a new map.";
+    } else {
+      slamStatusEl.classList.add("err");
+      slamStatusEl.textContent = "Failed to call /slam_toolbox/reset: " + (data.msg || "");
+    }
+  } catch (e) {
+    console.error(e);
+    slamStatusEl.classList.add("err");
+    slamStatusEl.textContent = "Error while calling SLAM reset.";
+  }
+});
+
+btnSlamSave.addEventListener("click", async () => {
+  slamStatusEl.classList.remove("ok", "err");
+  const name = (mapNameInput.value || "").trim();
+  slamStatusEl.textContent = "Saving map" + (name ? ` '${name}'...` : "...");
+
+  try {
+    const res = await fetch("/api/slam/save_map", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      slamStatusEl.classList.add("ok");
+      slamStatusEl.textContent =
+        `SaveMap requested. Files will be saved as '${data.name}.pgm/.yaml' (current working dir of slam_toolbox).`;
+    } else {
+      slamStatusEl.classList.add("err");
+      slamStatusEl.textContent = "Failed to call /slam_toolbox/save_map: " + (data.msg || "");
+    }
+  } catch (e) {
+    console.error(e);
+    slamStatusEl.classList.add("err");
+    slamStatusEl.textContent = "Error while calling SaveMap.";
+  }
 });
 
 // 서버에서 상태 가져오기

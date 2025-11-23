@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Pinky Pro Web Nav Monitor</title>
+  <style>
+    :root {
+      --pink-start: #ff6bb8;
+      --pink-end: #ff9ad4;
+      --blue-start: #5069d8;
+      --blue-end: #7a9be8;
+      --bg-dark: #0f172a;
+      --card-bg: #0b1020;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --accent: #ff9ad4;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top left, #201537, #020617 55%, #000000 100%);
+      color: var(--text-main);
+    }
+
+    /* 왼쪽: 메인 맵 카드 */
+    #left {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .map-card {
+      width: 100%;
+      max-width: 900px;
+      border-radius: 24px;
+      padding: 16px 16px 20px 16px;
+      background:
+        radial-gradient(circle at top left, rgba(255, 155, 210, 0.12), transparent 55%),
+        radial-gradient(circle at bottom right, rgba(104, 166, 255, 0.12), transparent 55%),
+        var(--card-bg);
+      box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.8),
+        0 0 0 1px rgba(255, 255, 255, 0.04);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .map-card-header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px 8px 4px;
+    }
+
+    .map-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .map-title span {
+      background: linear-gradient(135deg, var(--pink-start), var(--blue-end));
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    .chip {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(10px);
+    }
+
+    .chip-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: radial-gradient(circle, #22c55e, #15803d);
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.9);
+    }
+
+    canvas {
+      border-radius: 18px;
+      background: #000;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .map-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* 오른쪽: 컨트롤 패널 */
+    #right {
+      width: 320px;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      border-left: 1px solid rgba(15, 23, 42, 0.9);
+      background: radial-gradient(circle at top, rgba(248, 113, 185, 0.12), transparent 65%),
+                  radial-gradient(circle at bottom, rgba(56, 189, 248, 0.12), transparent 65%),
+                  #020617;
+    }
+
+    .panel-card {
+      background: rgba(15, 23, 42, 0.85);
+      border-radius: 18px;
+      padding: 14px 14px 12px 14px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+    }
+
+    /* 헤더 */
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .logo-wrap {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      background: radial-gradient(circle at top left, var(--pink-start), var(--blue-start));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .logo-wrap img {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .header-text-main {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .header-text-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .info-line {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .info-line span.value {
+      color: var(--text-main);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 섹션 타이틀 */
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    /* 토글 스위치 */
+    .layer-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .toggle-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+    }
+
+    .legend-global {
+      background: linear-gradient(135deg, #38bdf8, #22c1c3);
+    }
+
+    .legend-local {
+      background: linear-gradient(135deg, #7c3aed, #4c1d95);
+    }
+
+    .legend-free {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+    }
+
+    .legend-obstacle {
+      background: #000000;
+      border: 1px solid #111827;
+    }
+
+    .toggle input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .switch {
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+
+    .switch-knob {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.18s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+
+    .toggle input:checked + .switch {
+      background: linear-gradient(135deg, var(--pink-start), var(--blue-end));
+      border-color: transparent;
+    }
+
+    .toggle input:checked + .switch .switch-knob {
+      transform: translateX(14px);
+      background: #0b1120;
+    }
+
+    /* Legend */
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* 작은 푸터 텍스트 */
+    .tiny-note {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+<div id="left">
+  <div class="map-card">
+    <div class="map-card-header">
+      <div class="map-title">Pinky Pro <span>Navigation</span></div>
+      <div class="chip">
+        <span class="chip-dot"></span>
+        LIVE
+      </div>
+    </div>
+
+    <canvas id="mapCanvas" width="720" height="720"></canvas>
+
+    <div class="map-hint">
+      🖱️ 지도에서 <b>클릭 후 드래그</b>하면 2D Nav Goal (위치 + 방향)이 전송됩니다.
+    </div>
+  </div>
+</div>
+
+<div id="right">
+  <!-- 헤더 카드 -->
+  <div class="panel-card">
+    <div class="header-row">
+      <div class="logo-wrap">
+        <!-- 로고 파일명을 환경에 맞게 변경하세요 -->
+        <img src="pinklab_logo.png" alt="PinkLab Logo">
+      </div>
+      <div>
+        <div class="header-text-main">PinkLab · Pinky Pro</div>
+        <div class="header-text-sub">Web Navigation Console</div>
+      </div>
+    </div>
+    <div class="info-line">
+      <span>Robot pose</span>
+      <span class="value" id="poseText">-</span>
+    </div>
+    <div class="info-line">
+      <span>Last update</span>
+      <span class="value" id="updateText">-</span>
+    </div>
+  </div>
+
+  <!-- Layers 카드 -->
+  <div class="panel-card">
+    <div class="section-title">Layers</div>
+    <div class="layer-row">
+      <label class="toggle">
+        <div class="toggle-left">
+          <span class="legend-dot legend-global"></span>
+          <span>Global costmap</span>
+        </div>
+        <div>
+          <input type="checkbox" id="toggleGlobal" checked>
+          <div class="switch">
+            <div class="switch-knob"></div>
+          </div>
+        </div>
+      </label>
+
+      <label class="toggle">
+        <div class="toggle-left">
+          <span class="legend-dot legend-local"></span>
+          <span>Local costmap</span>
+        </div>
+        <div>
+          <input type="checkbox" id="toggleLocal" checked>
+          <div class="switch">
+            <div class="switch-knob"></div>
+          </div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Legend 카드 -->
+  <div class="panel-card">
+    <div class="section-title">Legend</div>
+    <div class="legend-row">
+      <span class="legend-item">
+        <span class="legend-dot legend-free"></span>
+        <span>Free</span>
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot legend-obstacle"></span>
+        <span>Obstacle</span>
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot legend-global"></span>
+        <span>Global costmap</span>
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot legend-local"></span>
+        <span>Local costmap</span>
+      </span>
+    </div>
+    <div class="tiny-note">
+      📌 RViz와 동일한 좌표계(<b>map</b> frame 기준)입니다.
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("mapCanvas");
+const ctx = canvas.getContext("2d");
+
+let latestState = null;
+
+// layer toggle 상태
+let showGlobalCostmap = true;
+let showLocalCostmap = true;
+
+// goal 드래그 상태
+let isDraggingGoal = false;
+let goalStartWorld = null;     // {x,y} world 좌표
+let goalCurrentCanvas = null;  // {x,y} canvas 좌표 (미리보기용)
+
+// 토글 이벤트 연결
+document.getElementById("toggleGlobal").addEventListener("change", (e) => {
+  showGlobalCostmap = e.target.checked;
+  drawState();
+});
+
+document.getElementById("toggleLocal").addEventListener("change", (e) => {
+  showLocalCostmap = e.target.checked;
+  drawState();
+});
+
+// 서버에서 상태 가져오기
+async function fetchState() {
+  try {
+    const res = await fetch("/api/state");
+    if (!res.ok) return;
+    const data = await res.json();
+    latestState = data;
+    drawState();
+    document.getElementById("updateText").innerText = new Date().toLocaleTimeString();
+
+    if (data.pose) {
+      const p = data.pose;
+      document.getElementById("poseText").innerText =
+        `x=${p.x.toFixed(2)}, y=${p.y.toFixed(2)}, yaw=${p.yaw.toFixed(2)}`;
+    } else {
+      document.getElementById("poseText").innerText = "-";
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// 맵 / 로봇 / 경로 / global/local costmap 그리기
+function drawState() {
+  if (!latestState || !latestState.map) {
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  const map = latestState.map;
+  const pose = latestState.pose;
+  const path = latestState.path || [];
+  const local = latestState.local_costmap;
+  const globalC = latestState.global_costmap;
+
+  const width = map.width;
+  const height = map.height;
+  const data = map.data;
+  const resolution = map.resolution;
+  const origin = map.origin;
+
+  // 캔버스 초기화
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 맵을 캔버스에 맞게 스케일
+  const scaleX = canvas.width / width;
+  const scaleY = canvas.height / height;
+  const scale = Math.min(scaleX, scaleY);
+
+  // (셀 좌표 -> 캔버스 좌표)
+  function cellToCanvas(ix, iy) {
+    const px = ix * scale;
+    const py = (height - 1 - iy) * scale; // y 뒤집기
+    return [px, py];
+  }
+
+  // (world -> 캔버스)
+  function worldToCanvas(wx, wy) {
+    const mx = (wx - origin.x) / resolution;
+    const my = (wy - origin.y) / resolution;
+    return cellToCanvas(mx, my);
+  }
+
+  // ---- global map 그리기 ----
+  for (let iy = 0; iy < height; iy++) {
+    for (let ix = 0; ix < width; ix++) {
+      const idx = iy * width + ix;
+      const v = data[idx]; // -1: unknown, 0: free, 100: occupied ...
+
+      if (v < 0) {
+        ctx.fillStyle = "#4b5563";    // unknown: 중간 회색
+      } else if (v === 0) {
+        ctx.fillStyle = "#ffffff";    // free: 흰색
+      } else if (v >= 100) {
+        ctx.fillStyle = "#000000";    // obstacle: 검정
+      } else {
+        ctx.fillStyle = "#d1d5db";    // 약간 비용 있는 free
+      }
+
+      const [px, py] = cellToCanvas(ix, iy);
+      ctx.fillRect(px, py, scale, scale);
+    }
+  }
+
+  // ---- GLOBAL costmap (인플레이션 링) 오버레이 ----
+  if (showGlobalCostmap && globalC && globalC.data && globalC.data.length > 0) {
+    const gwidth = globalC.width;
+    const gheight = globalC.height;
+    const gres = globalC.resolution;
+    const gorg = globalC.origin;
+    const gdata = globalC.data;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(56, 189, 248, 0.5)"; // 연한 하늘색/청록색
+
+    for (let iy = 0; iy < gheight; iy++) {
+      for (let ix = 0; ix < gwidth; ix++) {
+        const idx = iy * gwidth + ix;
+        const cost = gdata[idx];
+        if (cost <= 0) continue;
+
+        const wx = gorg.x + (ix + 0.5) * gres;
+        const wy = gorg.y + (iy + 0.5) * gres;
+        const [px, py] = worldToCanvas(wx, wy);
+
+        ctx.fillRect(px, py, scale, scale);
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---- LOCAL costmap (보라색) 오버레이 ----
+  if (showLocalCostmap && local && local.data && local.data.length > 0) {
+    const lwidth = local.width;
+    const lheight = local.height;
+    const lres = local.resolution;
+    const lorg = local.origin;
+    const ldata = local.data;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(124, 58, 237, 0.7)"; // 보라색
+
+    for (let iy = 0; iy < lheight; iy++) {
+      for (let ix = 0; ix < lwidth; ix++) {
+        const idx = iy * lwidth + ix;
+        const cost = ldata[idx];
+        if (cost <= 0) continue;
+
+        const wx = lorg.x + (ix + 0.5) * lres;
+        const wy = lorg.y + (iy + 0.5) * lres;
+        const [px, py] = worldToCanvas(wx, wy);
+
+        ctx.fillRect(px, py, scale, scale);
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---- path 그리기 ----
+  if (path.length > 0) {
+    ctx.strokeStyle = "#22c55e";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    path.forEach((pt, i) => {
+      const [px, py] = worldToCanvas(pt.x, pt.y);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+  }
+
+  // ---- 로봇 위치 (TF 기반 pose) ----
+  if (pose) {
+    const [rx, ry] = worldToCanvas(pose.x, pose.y);
+    ctx.fillStyle = "#f97316";
+    ctx.beginPath();
+    ctx.arc(rx, ry, 6, 0, 2 * Math.PI);
+    ctx.fill();
+
+    const len = 20;
+    const hx = rx + len * Math.cos(-pose.yaw);
+    const hy = ry + len * Math.sin(-pose.yaw);
+    ctx.strokeStyle = "#fde68a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(hx, hy);
+    ctx.stroke();
+  }
+
+  // ---- goal 드래그 미리보기 ----
+  if (isDraggingGoal && goalStartWorld && goalCurrentCanvas) {
+    const [sx, sy] = worldToCanvas(goalStartWorld.x, goalStartWorld.y);
+    const ex = goalCurrentCanvas.x;
+    const ey = goalCurrentCanvas.y;
+
+    ctx.strokeStyle = "#fb7185";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    ctx.fillStyle = "#fb7185";
+    ctx.beginPath();
+    ctx.arc(ex, ey, 4, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+// canvas 좌표 → world 좌표 변환 (map 기준)
+function canvasToWorld(cx, cy) {
+  if (!latestState || !latestState.map) return null;
+
+  const map = latestState.map;
+  const width = map.width;
+  const height = map.height;
+  const resolution = map.resolution;
+  const origin = map.origin;
+
+  const scaleX = canvas.width / width;
+  const scaleY = canvas.height / height;
+  const scale = Math.min(scaleX, scaleY);
+
+  const ix = cx / scale;
+  const iy = height - 1 - (cy / scale); // y 뒤집기
+
+  const wx = origin.x + ix * resolution;
+  const wy = origin.y + iy * resolution;
+
+  return { x: wx, y: wy };
+}
+
+// ---- goal 지정: 클릭 + 드래그 ----
+canvas.addEventListener("mousedown", (evt) => {
+  if (!latestState || !latestState.map) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const cx = evt.clientX - rect.left;
+  const cy = evt.clientY - rect.top;
+
+  const w = canvasToWorld(cx, cy);
+  if (!w) return;
+
+  isDraggingGoal = true;
+  goalStartWorld = w;
+  goalCurrentCanvas = { x: cx, y: cy };
+  drawState(); // 미리보기 갱신
+});
+
+canvas.addEventListener("mousemove", (evt) => {
+  if (!isDraggingGoal) return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = evt.clientX - rect.left;
+  const cy = evt.clientY - rect.top;
+
+  goalCurrentCanvas = { x: cx, y: cy };
+  drawState();
+});
+
+canvas.addEventListener("mouseup", async (evt) => {
+  if (!isDraggingGoal || !goalStartWorld) {
+    isDraggingGoal = false;
+    goalStartWorld = null;
+    goalCurrentCanvas = null;
+    return;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const cx = evt.clientX - rect.left;
+  const cy = evt.clientY - rect.top;
+
+  const endWorld = canvasToWorld(cx, cy);
+  if (!endWorld) {
+    isDraggingGoal = false;
+    goalStartWorld = null;
+    goalCurrentCanvas = null;
+    return;
+  }
+
+  const dx = endWorld.x - goalStartWorld.x;
+  const dy = endWorld.y - goalStartWorld.y;
+  const yaw = Math.atan2(dy, dx);
+
+  const goal = {
+    x: goalStartWorld.x,
+    y: goalStartWorld.y,
+    yaw: yaw,
+  };
+  console.log("Sending goal", goal);
+
+  try {
+    const res = await fetch("/api/goal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(goal),
+    });
+    const data = await res.json();
+    console.log("Goal response", data);
+  } catch (e) {
+    console.error(e);
+  }
+
+  isDraggingGoal = false;
+  goalStartWorld = null;
+  goalCurrentCanvas = null;
+  drawState();
+});
+
+// 주기적으로 상태 폴링
+setInterval(fetchState, 500);
+fetchState();
+</script>
+</body>
+</html>
